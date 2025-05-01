@@ -15,7 +15,7 @@ with open(JSON_FILE, "r", encoding="utf-8") as f:
     TAROT_CARDS = json.load(f)
 
 with open(TOKEN_FILE, "r") as f:
-    TOKEN = f.read()
+    TOKEN = f.read().replace('\n', '')
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text("Привет! Я бот Таро. Напиши /card, чтобы получить карту дня и её предсказание.")
