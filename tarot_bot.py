@@ -31,16 +31,15 @@ if not GROQ_API_KEY:
     raise ValueError("Groq API key is empty")
 groq_client = Groq(api_key=GROQ_API_KEY)
 
-# Store daily cards and questions per user: {user_id: {date: {card_index, question_asked}}}
+# Store daily cards per user: {user_id: {date: {card_index}}}
 DAILY_CARDS = {}
-DAILY_QUESTIONS = {}
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         "Привет! Я бот Таро. Команды:\n"
         "/card - получить карту дня\n"
         "/anycard - случайная карта\n"
-        "/question <вопрос> - задать вопрос (1 в день, до 20 слов)\n"
+        "/question <вопрос> - задать вопрос (до 20 слов)\n"
         "/stats - статистика"
     )
 
@@ -78,15 +77,9 @@ async def anycard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def question(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     global QUESTIONS_ASKED_SINCE_START
-    global CARDS_REQUESTED_SINCE_START
     user_id = update.effective_user.id
     message_time = update.message.date
     user_date = message_time.date().isoformat()
-
-    # Check daily question limit
-    if user_id in DAILY_QUESTIONS and DAILY_QUESTIONS[user_id].get('date') == user_date:
-        await update.message.reply_text("Извините, вы уже задавали вопрос сегодня. Попробуйте завтра!")
-        return
 
     # Get question from command
     if not context.args:
@@ -101,8 +94,6 @@ async def question(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     QUESTIONS_ASKED_SINCE_START += 1
-    CARDS_REQUESTED_SINCE_START += 1
-    DAILY_QUESTIONS[user_id] = {'date': user_date}
 
     # Draw a random card
     card_index = random.randint(0, len(TAROT_CARDS) - 1)
