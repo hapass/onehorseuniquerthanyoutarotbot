@@ -21,6 +21,6 @@
 
 Free popular deck uploaded: Rider Waite.
 
-# Demo
+## Demo
 
 ![Demo](demo.png)
