@@ -113,7 +113,7 @@ async def question(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "Вы мудрый таролог, отвечающий на вопросы пользователей с мистической проницательностью. "
         "Для ответа вытянута карта Таро: {card_name}. "
         "Включите энергию этой карты в свой ответ. "
-        "Давайте краткие, содержательные ответы (50-100 слов), связанные с мудростью Таро. "
+        "Давайте краткие, содержательные ответы (50-70 слов), связанные с мудростью Таро. "
         "Используйте простой язык, избегайте сложных терминов."
     ).format(card_name=card['name'])
 
@@ -126,7 +126,7 @@ async def question(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": question}
                 ],
-                max_completion_tokens=150,  # Conservative token limit for free tier
+                max_completion_tokens=200,  # Conservative token limit for free tier
                 temperature=0.7,
                 stream=False
             )
