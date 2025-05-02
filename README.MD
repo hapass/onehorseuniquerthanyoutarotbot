@@ -24,3 +24,5 @@ Free popular deck uploaded: Rider Waite.
 ## Demo
 
 ![Demo](demo.png)
+
+Use it: https://t.me/OneHorseUniquerThanYouTarotbot
