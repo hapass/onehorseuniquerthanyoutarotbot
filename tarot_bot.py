@@ -7,18 +7,13 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 from groq import Groq
 import asyncio
 
-CARDS_REQUESTED_SINCE_START = 0
-QUESTIONS_ASKED_SINCE_START = 0
-
 TOKEN_FILE = "access_token.txt"
 JSON_FILE = "tarot_cards.json"
 IMAGES_DIR = "rider-waite-tarot"
 
-# Load configuration
 with open(JSON_FILE, "r", encoding="utf-8") as f:
     TAROT_CARDS = json.load(f)
 
-# Read Telegram token and Groq API key from token file
 with open(TOKEN_FILE, "r") as f:
     lines = f.readlines()
     if len(lines) < 2:
@@ -26,83 +21,74 @@ with open(TOKEN_FILE, "r") as f:
     TELEGRAM_TOKEN = lines[0].strip()
     GROQ_API_KEY = lines[1].strip()
 
-# Initialize Groq client
 if not GROQ_API_KEY:
     raise ValueError("Groq API key is empty")
 groq_client = Groq(api_key=GROQ_API_KEY)
 
-# Store daily cards per user: {user_id: {date: {card_index}}}
-DAILY_CARDS = {}
+# Small in-memory database: { user_id: { card_date, card_index, question_date } }
+USER_DATA = {}
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
-        "Привет! Я бот Таро. Команды:\n"
+        "Привет! Я бот Таро и вот мои команды:\n"
         "/card - получить карту дня\n"
-        "/anycard - случайная карта\n"
-        "/question <вопрос> - задать вопрос (до 20 слов)\n"
-        "/stats - статистика"
+        "/anycard - получить случайную карту\n"
+        "/question <вопрос> - задать вопрос (1 в день, до 100 символов)"
     )
 
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(
-        f"С последнего запуска:\n"
-        f"Запрошено карт: {CARDS_REQUESTED_SINCE_START}\n"
-        f"Задано вопросов: {QUESTIONS_ASKED_SINCE_START}"
-    )
+    await update.message.reply_text(f"Уникальных пользователей с последнего запуска: {len(list(USER_DATA))}")
 
 async def card(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    global CARDS_REQUESTED_SINCE_START
-    CARDS_REQUESTED_SINCE_START += 1
-
     user_id = update.effective_user.id
     message_time = update.message.date
     user_date = message_time.date().isoformat()
 
-    if user_id not in DAILY_CARDS or DAILY_CARDS[user_id].get('date') != user_date:
+    if user_id not in USER_DATA or USER_DATA[user_id].get('card_date') != user_date:
         card_index = random.randint(0, len(TAROT_CARDS) - 1)
-        DAILY_CARDS[user_id] = {'date': user_date, 'card_index': card_index}
+        USER_DATA[user_id] = {'card_date': user_date, 'card_index': card_index}
     else:
-        card_index = DAILY_CARDS[user_id]['card_index']
+        card_index = USER_DATA[user_id]['card_index']
 
     card = TAROT_CARDS[card_index]
-    await send_card_message(update, card, "Карта дня: ")
+    await send_card_message(update, card, f"Карта дня: {card['name']}\n\n{card['meaning']}")
 
 async def anycard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    global CARDS_REQUESTED_SINCE_START
-    CARDS_REQUESTED_SINCE_START += 1
-
     card_index = random.randint(0, len(TAROT_CARDS) - 1)
     card = TAROT_CARDS[card_index]
-    await send_card_message(update, card)
+    await send_card_message(update, card, f"{card['name']}\n\n{card['meaning']}")
 
 async def question(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    global QUESTIONS_ASKED_SINCE_START
     user_id = update.effective_user.id
     message_time = update.message.date
     user_date = message_time.date().isoformat()
 
-    # Get question from command
+    if user_id in USER_DATA and USER_DATA[user_id].get('question_date') == user_date:
+        await update.message.reply_text("Извините, вы уже задавали вопрос сегодня. Попробуйте завтра!")
+        return
+
     if not context.args:
         await update.message.reply_text("Пожалуйста, задайте вопрос после команды /question")
         return
 
     question = ' '.join(context.args)
-    # Check word count
-    word_count = len(question.split())
-    if word_count > 20:
-        await update.message.reply_text("Вопрос слишком длинный! Максимум 20 слов.")
+    if question.strip() == "":
+        await update.message.reply_text("Пожалуйста, задайте вопрос после команды /question")
         return
 
-    QUESTIONS_ASKED_SINCE_START += 1
+    symbol_count = len(question)
+    if symbol_count > 100:
+        await update.message.reply_text("Вопрос слишком длинный, я не смогу должным образом сфокусироваться. Пожалуйста, задайте вопрос максимум из 100 символов.")
+        return
 
-    # Draw a random card
+    USER_DATA[user_id] = {'question_date': user_date}
+
     card_index = random.randint(0, len(TAROT_CARDS) - 1)
     card = TAROT_CARDS[card_index]
 
-    # Prepare Groq API call with card context
     system_prompt = (
         "Вы мудрый таролог, отвечающий на вопросы пользователей с мистической проницательностью. "
-        "Для ответа вытянута карта Таро: {card_name}. "
+        "Для ответа вытянута карта Таро: {card_name}. Больше тянуть карты вы не можете."
         "Включите энергию этой карты в свой ответ. "
         "Давайте краткие, содержательные ответы (50-70 слов), связанные с мудростью Таро. "
         "Используйте простой язык, избегайте сложных терминов."
@@ -117,38 +103,22 @@ async def question(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": question}
                 ],
-                max_completion_tokens=200,  # Conservative token limit for free tier
+                max_completion_tokens=300,  # Conservative token limit for free tier
                 temperature=0.7,
                 stream=False
             )
         )
-        
-        answer = response.choices[0].message.content
-        message = f"Карта: {card['name']}\nОтвет на ваш вопрос:\n{answer}"
 
-        # Send response with card image
-        success = False
-        image_name = card.get('image')
-        if image_name:
-            image_path = os.path.join(IMAGES_DIR, image_name)
-            if os.path.exists(image_path):
-                with open(image_path, 'rb') as photo:
-                    success = True
-                    await update.message.reply_photo(photo=photo, caption=message)
-
-        if not success:
-            await update.message.reply_text(message)
+        await send_card_message(update, card, f"Карта: {card['name']}\n\nОтвет на ваш вопрос:\n{response.choices[0].message.content}")
 
     except groq_client.APIConnectionError:
         await update.message.reply_text("Не могу уловить связь со вселенной. Попробуйте завтра.")
     except groq_client.RateLimitError:
-        await update.message.reply_text("Мне нужно больше энергии чтобы ответить на вопрос. Попробуйте завтра.")
+        await update.message.reply_text("Мне нужно больше энергии чтобы ответить на этот вопрос. Попробуйте завтра.")
     except Exception:
-        await update.message.reply_text(f"Вы отвергнуты вселенной.")
+        await update.message.reply_text("Вы отвергнуты вселенной.")
 
-async def send_card_message(update: Update, card: dict, message: str = '') -> None:
-    message += f"{card['name']}\n\n{card['meaning']}"
-    
+async def send_card_message(update: Update, card: dict, message: str) -> None:
     success = False
     image_name = card.get('image')
     if image_name:
