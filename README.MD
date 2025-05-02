@@ -15,9 +15,9 @@
 
 ## Features
 
-1. /card - Picks a random card from the deck with description. Repeating the command will draw the same card this day. Draws new card the next day.
-1. /anycard - Picks a random card from the deck with description each time.
-1. /question <question> - Picks a card and gives prediction for particular question using AI. Could be used only once a day. Question character limit is 100.
+1. **/card** - Picks a random card from the deck with description. Repeating the command will draw the same card this day. Draws new card the next day.
+1. **/anycard** - Picks a random card from the deck with description each time.
+1. **/question _question_** - Picks a card and gives prediction for particular question using AI. Could be used only once a day. Question character limit is 100.
 
 Free popular deck uploaded: Rider Waite.
 
